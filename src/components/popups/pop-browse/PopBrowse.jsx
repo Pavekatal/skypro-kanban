@@ -34,19 +34,21 @@ import { SLabel } from "../../inputs/SInput.syled";
 import TextArea from "../../inputs/TextArea";
 import { formattedDate } from "../../../utils/formattedDate";
 import { AuthContext } from "../../../context/AuthContext";
+import { ThemeContext } from "../../../context/ThemeContext";
 
 const PopBrowse = () => {
   const { id } = useParams();
   const [task, setTask] = useState(null);
-  const { viewTask, updateTask, removeTask, error, setError } =
-    useContext(TasksContext);
+  const { viewTask, updateTask, removeTask } = useContext(TasksContext);
   const { user } = useContext(AuthContext);
   const [isEditTask, setIsEditTask] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [dataField, setDataField] = useState(null);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
   const isEditCalendar = isEditTask;
+  const { isDark } = useContext(ThemeContext);
 
   const statuses = [
     "без статуса",
@@ -56,11 +58,18 @@ const PopBrowse = () => {
     "готово",
   ];
 
+  const [errors, setErrors] = useState({
+    title: false,
+    topic: false,
+    status: false,
+    description: false,
+    date: false,
+  });
+
   useEffect(() => {
     const fetchTask = async () => {
       try {
         const data = await viewTask({ id });
-        console.log("Fetched data:", data);
         setTask(data);
         setDataField(data.description);
         setSelectedStatus(data.status);
@@ -70,6 +79,38 @@ const PopBrowse = () => {
     };
     fetchTask();
   }, [viewTask, id]);
+
+  const validateForm = () => {
+    const newErrors = {
+      title: false,
+      topic: false,
+      description: false,
+      date: false,
+    };
+
+    let isValid = true;
+
+    if (!dataField.trim()) {
+      newErrors.description = true;
+      setError("Укажите все данные");
+      isValid = false;
+    }
+
+    if (!selectedStatus) {
+      newErrors.topic = true;
+      setError("Укажите все данные");
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
+  const handleChange = (event) => {
+    setDataField(event.target.value);
+    setErrors({ ...errors, description: false });
+    setError("");
+  };
 
   const handleEditTask = async (event) => {
     event.preventDefault();
@@ -94,6 +135,10 @@ const PopBrowse = () => {
       return;
     }
 
+    if (!validateForm()) {
+      return;
+    }
+
     const dataToSend = {
       ...task,
       description: dataField,
@@ -102,12 +147,9 @@ const PopBrowse = () => {
     };
 
     try {
-      console.log("dataToSend перед запросом updateTask", dataToSend);
-      console.log("Передаваемый id в updateTask", id);
       await updateTask({ id, user, task: dataToSend });
       const updatedTask = await viewTask({ id, token: user.token });
       setTask(updatedTask);
-      console.log("dataToSend после запроса updateTask", dataToSend);
       setIsEditTask(false);
       setError("");
     } catch (err) {
@@ -121,10 +163,12 @@ const PopBrowse = () => {
     try {
       const updatedTask = await removeTask({ id, token: user.token });
       setTask(updatedTask);
+      console.log("Удаление прошло успешно, переходим...");
       navigate("/");
     } catch (err) {
       setError(err.message);
-      console.log(err.message);
+      console.log("ошибка при удалении получилась:", err.message);
+      return;
     }
   };
 
@@ -138,13 +182,23 @@ const PopBrowse = () => {
             <PopBrowseContent>
               <PopBrowseTopBlock id={id}>
                 <PopBrowseTtl>{task.title}</PopBrowseTtl>
-                <FillingError>{error}</FillingError>
+
                 <ThemeCard
                   $themePopCard="themePopCard"
                   $activeCategory="activeCategory"
-                  $color={themesBgColors[task.topic]}
+                  $color={
+                    isDark
+                      ? themesColors[task.topic]
+                      : themesBgColors[task.topic]
+                  }
                 >
-                  <ThemeCategoryCard $color={themesColors[task.topic]}>
+                  <ThemeCategoryCard
+                    $color={
+                      isDark
+                        ? themesBgColors[task.topic]
+                        : themesColors[task.topic]
+                    }
+                  >
                     {task.topic}
                   </ThemeCategoryCard>
                 </ThemeCard>
@@ -153,7 +207,12 @@ const PopBrowse = () => {
                 <StatusP>Статус</StatusP>
                 <StatusThemes>
                   {!isEditTask ? (
-                    <StatusTheme $isActive={true} $gray="gray">
+                    <StatusTheme
+                      $isActive={true}
+                      $isDark={isDark}
+                      $isEditTask={isEditTask}
+                      $gray="gray"
+                    >
                       <StatusThemeP>{task.status}</StatusThemeP>
                     </StatusTheme>
                   ) : (
@@ -165,6 +224,7 @@ const PopBrowse = () => {
                           status.toLocaleLowerCase() ===
                           selectedStatus.toLowerCase()
                         }
+                        $isDark={isDark}
                         onClick={() => handleSelectedStatus(status)}
                       >
                         <p>{status}</p>
@@ -178,12 +238,15 @@ const PopBrowse = () => {
                   <PopBrowseFormBlock>
                     <SLabel htmlFor="textArea01">Описание задачи</SLabel>
                     <TextArea
+                      error={errors.description}
                       name="description"
                       id="textArea01"
                       readOnly={!isEditTask}
+                      $isDark={isDark}
+                      $isEditTask={isEditTask}
                       placeholder="Введите описание задачи..."
                       value={dataField}
-                      onChange={(event) => setDataField(event.target.value)}
+                      onChange={handleChange}
                     ></TextArea>
                   </PopBrowseFormBlock>
                 </PopBrowseForm>
@@ -195,6 +258,7 @@ const PopBrowse = () => {
                   Срок исполнения:{" "}
                 </Calendar>
               </PopBrowseWrap>
+              <FillingError>{error}</FillingError>
               {!isEditTask ? (
                 <PopBrowseBtnBrowse>
                   <div className="btn-group">
